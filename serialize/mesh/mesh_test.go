@@ -1,33 +1,225 @@
-package serialize
+package mesh
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/weibocom/motan-go/core"
+	"math"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/weibocom/motan-go/core"
 )
 
-func TestGenericMessage_GetField(t *testing.T) {
-	var gm GenericMessage
-	of := reflect.TypeOf(&gm)
-	fmt.Println(of.Kind())
-	if of.Kind() == reflect.Ptr {
-		of = of.Elem()
+type TestStruct struct {
+	F1  string            `mesh:"1"`
+	F2  bool              `mesh:"2"`
+	F3  byte              `mesh:"3"`
+	F4  int16             `mesh:"4"`
+	F5  int32             `mesh:"5"`
+	F6  int64             `mesh:"6"`
+	F7  float32           `mesh:"7"`
+	F8  float64           `mesh:"8"`
+	F9  []string          `mesh:"9"`
+	F10 map[string]string `mesh:"10"`
+	F11 []byte            `mesh:"11"`
+	F12 *TestStruct       `mesh:"12"`
+}
+
+func (m *TestStruct) Marshal(buf *core.BytesBuffer) error {
+	buf.WriteByte(TMessage)
+	pos := buf.GetWPos()
+	buf.SetWPos(pos + 4)
+
+	buf.WriteZigzag32(1)
+	EncodeString(m.F1, buf)
+
+	buf.WriteZigzag32(2)
+	EncodeBool(m.F2, buf)
+
+	buf.WriteZigzag32(3)
+	EncodeByte(m.F3, buf)
+
+	buf.WriteZigzag32(4)
+	EncodeInt16(m.F4, buf)
+
+	buf.WriteZigzag32(5)
+	EncodeInt32(m.F5, buf)
+
+	buf.WriteZigzag32(6)
+	EncodeInt64(m.F6, buf)
+
+	buf.WriteZigzag32(7)
+	EncodeFloat32(m.F7, buf)
+
+	buf.WriteZigzag32(8)
+	EncodeFloat64(m.F8, buf)
+
+	if m.F9 != nil {
+		buf.WriteZigzag32(9)
+		if err := SerializeBuf(m.F9, buf); err != nil {
+			return err
+		}
 	}
+	if m.F10 != nil {
+		buf.WriteZigzag32(10)
+		if err := SerializeBuf(m.F10, buf); err != nil {
+			return err
+		}
+	}
+	if m.F11 != nil {
+		buf.WriteZigzag32(11)
+		EncodeBytes(m.F11, buf)
+	}
+	if m.F12 != nil {
+		buf.WriteZigzag32(12)
+		if err := SerializeBuf(m.F11, buf); err != nil {
+			return err
+		}
+	}
+
+	nPos := buf.GetWPos()
+	buf.SetWPos(pos)
+	buf.WriteUint32(uint32(nPos - pos - 4))
+	buf.SetWPos(nPos)
+	return nil
+}
+
+func (m *TestStruct) Unmarshal(buf *core.BytesBuffer) error {
+	tag, _ := buf.ReadByte()
+	if tag != TMessage {
+		return errors.New("message tag expected, but actual tag is " + strconv.Itoa(int(tag)))
+	}
+	total, err := buf.ReadUint32()
+	if err != nil {
+		return err
+	}
+	if total <= 0 {
+		return nil
+	}
+	pos := buf.GetRPos()
+	endPos := pos + int(total)
+	for buf.GetRPos() < endPos {
+		filedNumber, err := buf.ReadZigzag32()
+		if err != nil {
+			return err
+		}
+		switch filedNumber {
+		case 1:
+			_, err = DecodeString(buf, &m.F1)
+			if err != nil {
+				return err
+			}
+		case 2:
+			_, err = DecodeBool(buf, &m.F2)
+			if err != nil {
+				return err
+			}
+		case 3:
+			_, err = DecodeByte(buf, &m.F3)
+			if err != nil {
+				return err
+			}
+		case 4:
+			_, err = DecodeInt16(buf, &m.F4)
+			if err != nil {
+				return err
+			}
+		case 5:
+			_, err = DecodeInt32(buf, &m.F5)
+			if err != nil {
+				return err
+			}
+		case 6:
+			_, err = DecodeInt64(buf, &m.F6)
+			if err != nil {
+				return err
+			}
+		case 7:
+			_, err = DecodeFloat32(buf, &m.F7)
+			if err != nil {
+				return err
+			}
+		case 8:
+			_, err = DecodeFloat64(buf, &m.F8)
+			if err != nil {
+				return err
+			}
+		case 9:
+			_, err = DecodeArray(buf, &m.F9)
+			if err != nil {
+				return err
+			}
+		case 10:
+			_, err = DecodeMap(buf, &m.F10)
+			if err != nil {
+				return err
+			}
+		case 11:
+			_, err = DecodeBytes(buf, &m.F11)
+			if err != nil {
+				return err
+			}
+		case 12:
+			testStruct := &TestStruct{}
+			err := testStruct.Unmarshal(buf)
+			if err != nil {
+				return err
+			}
+			m.F12 = testStruct
+		default:
+			_, err = DeSerializeBuf(buf, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if buf.GetRPos() != endPos {
+		return ErrWrongSize
+	}
+	return nil
+}
+
+func TestMessage(t *testing.T) {
+	s := TestStruct{}
+	s.F1 = "testString"
+	s.F2 = true
+	s.F3 = 125
+	s.F4 = 126
+	s.F5 = 256
+	s.F6 = 4096
+	s.F7 = 12.1
+	s.F8 = 1000000000000.12
+	s.F9 = []string{"1", "2", "3"}
+	f10 := make(map[string]string)
+	f10["key1"] = "value1"
+	f10["key2"] = "value2"
+	s.F10 = f10
+	s.F11 = []byte{1, 2, 3, 4}
+
+	buffer := core.NewBytesBuffer(4096)
+	s.Marshal(buffer)
+
+	flag, _ := buffer.ReadByte()
+	assert.Equal(t, byte(TMessage), flag)
+	ds := TestStruct{}
+	ds.Unmarshal(buffer)
+	bytes, _ := json.Marshal(&ds)
+	fmt.Println(string(bytes))
 }
 
 // serialize && deserialize string
 func TestMotanSerializeString(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	motanVerifyString("teststring", ser, t)
 	motanVerifyString("t", ser, t)
 	motanVerifyString("", ser, t)
 }
 
 func TestMotanSerializeStringMap(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	var m map[string]string
 	motanVerifyMap(m, ser, t)
 	m = make(map[string]string, 16)
@@ -37,7 +229,7 @@ func TestMotanSerializeStringMap(t *testing.T) {
 }
 
 func TestMotanSerializeMap(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	value := make([]interface{}, 0, 16)
 	var m map[interface{}]interface{}
 	m = make(map[interface{}]interface{}, 16)
@@ -85,7 +277,7 @@ func TestMotanSerializeMap(t *testing.T) {
 }
 
 func TestMotanSerializeArray(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	// string array
 	value := make([]interface{}, 0, 16)
 	sa := make([]string, 0, 16)
@@ -160,7 +352,7 @@ func TestMotanSerializeArray(t *testing.T) {
 }
 
 func TestMotanSerializeBytes(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	var ba []byte
 	motanVerifyBytes(ba, ser, t)
 	ba = make([]byte, 2, 2)
@@ -175,7 +367,7 @@ func TestMotanSerializeBytes(t *testing.T) {
 }
 
 func TestMotanSerializeNil(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	var test error
 	b, err := ser.Serialize(test)
 	if err != nil {
@@ -193,7 +385,7 @@ func TestMotanSerializeNil(t *testing.T) {
 
 func TestMotanSerializeMulti(t *testing.T) {
 	//single value
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	var rs string
 	motanVerifySingleValue("string", &rs, ser, t)
 	m := make(map[string]string, 16)
@@ -213,31 +405,41 @@ func TestMotanSerializeMulti(t *testing.T) {
 }
 
 func TestMotanSerializeBaseType(t *testing.T) {
-	ser := &MotanSerialization{}
+	ser := &Serialization{}
 	// bool
 	motanVerifyBaseType(true, ser, t)
 	motanVerifyBaseType(false, ser, t)
 	//byte
+	motanVerifyBaseType(byte(math.MaxUint8), ser, t)
 	motanVerifyBaseType(byte(16), ser, t)
 	motanVerifyBaseType(byte(0), ser, t)
 	motanVerifyBaseType(byte(255), ser, t)
 	// int16
+	motanVerifyBaseType(int16(math.MaxInt16), ser, t)
+	motanVerifyBaseType(int16(math.MinInt16), ser, t)
 	motanVerifyBaseType(int16(-16), ser, t)
 	motanVerifyBaseType(int16(0), ser, t)
+
 	//int32
+	motanVerifyBaseType(int32(math.MaxInt32), ser, t)
+	motanVerifyBaseType(int32(math.MinInt32), ser, t)
 	motanVerifyBaseType(int32(-16), ser, t)
 	motanVerifyBaseType(int32(0), ser, t)
 	//int
 	motanVerifyBaseType(int(-16), ser, t)
 	motanVerifyBaseType(int(0), ser, t)
 	//int64
+	motanVerifyBaseType(int64(math.MaxInt64), ser, t)
+	motanVerifyBaseType(int64(math.MinInt64), ser, t)
 	motanVerifyBaseType(int64(-16), ser, t)
 	motanVerifyBaseType(int64(0), ser, t)
 	//float32
+	motanVerifyBaseType(float32(math.MaxFloat32), ser, t)
 	motanVerifyBaseType(float32(3.141592653), ser, t)
 	motanVerifyBaseType(float32(-3.141592653), ser, t)
 	motanVerifyBaseType(float32(0), ser, t)
 	//float64
+	motanVerifyBaseType(float64(math.MaxFloat64), ser, t)
 	motanVerifyBaseType(float64(3.141592653), ser, t)
 	motanVerifyBaseType(float64(-3.141592653), ser, t)
 	motanVerifyBaseType(float64(0), ser, t)
@@ -308,7 +510,7 @@ func motanVerifyString(s string, ser core.Serialization, t *testing.T) {
 	if err != nil {
 		t.Errorf("serialize string fail. err:%v\n", err)
 	}
-	if b[0] != mstString {
+	if b[0] != TString {
 		t.Errorf("serialize string fail. b:%v\n", b)
 	}
 	var ns string
@@ -326,7 +528,7 @@ func motanVerifyMap(m map[string]string, ser core.Serialization, t *testing.T) {
 	if err != nil {
 		t.Errorf("serialize Map fail. err:%v\n", err)
 	}
-	if b[0] != mstUnpackedMap {
+	if b[0] != TMap {
 		t.Errorf("serialize Map fail. b:%v\n", b)
 	}
 	nm := make(map[string]string, 16)
@@ -349,7 +551,7 @@ func motanVerifyBytes(ba []byte, ser core.Serialization, t *testing.T) {
 	if err != nil {
 		t.Errorf("serialize []byte fail. err:%v\n", err)
 	}
-	if b[0] != mstByteArray {
+	if b[0] != TByteArray {
 		t.Errorf("serialize []byte fail. b:%v\n", b)
 	}
 	nba := make([]byte, 0, 1024)

@@ -542,6 +542,11 @@ func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
 		if d, ok := m.GetValue().(*DeserializableValue); ok {
 			v, err := d.Deserialize(toType)
 			if err != nil {
+				m.Exception = &Exception{
+					ErrCode: 500,
+					ErrMsg:  err.Error(),
+					ErrType: FrameworkException,
+				}
 				return err
 			}
 			m.Value = v
@@ -602,8 +607,8 @@ func (d *DefaultExtensionFactory) GetLB(url *URL) LoadBalance {
 }
 
 func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
-	if newDefualt, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
-		return newDefualt()
+	if newDefault, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
+		return newDefault()
 	}
 	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!\n", name)
 	return nil
