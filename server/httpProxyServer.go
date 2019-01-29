@@ -14,13 +14,20 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	"github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/http"
+	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
 )
 
 const (
 	HTTPProxyServerName = "motan"
 	DefaultTimeout      = 5 * time.Second
+)
+
+const (
+	HTTPProxyKeepaliveKey     = "httpProxyKeepalive"
+	HTTPProxyResolveConfKey   = "httpProxyResolveConf"
+	HTTPProxyDefaultDomainKey = "httpProxyDefaultDomain"
+	HTTPProxyTimeoutKey       = "httpProxyTimeout"
 )
 
 type HTTPClusterGetter interface {
@@ -45,25 +52,34 @@ func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
 func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPClusterGetter) error {
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
+
+	if resolveConf := s.url.GetParam(HTTPProxyResolveConfKey, ""); resolveConf != "" {
+		resolver, err := mhttp.NewResolver(resolveConf)
+		if err != nil {
+			return err
+		}
+		mhttp.ResolveFunc = func(host string) (ips []net.IP, e error) {
+			return resolver.LookupIP(host)
+		}
+	}
 	s.clusterGetter = clusterGetter
-	s.keepalive, _ = strconv.ParseBool(s.url.GetParam("httpProxyKeepalive", "true"))
-	s.defaultDomain = s.url.GetParam("httpProxyDefaultDomain", "")
+	s.keepalive, _ = strconv.ParseBool(s.url.GetParam(HTTPProxyKeepaliveKey, "true"))
+	s.defaultDomain = s.url.GetParam(HTTPProxyDefaultDomainKey, "")
 	s.deny = append(s.deny, "127.0.0.1:"+s.url.GetPortStr())
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
-
-	// TODO: configurable timeout
+	proxyTimeout := s.url.GetTimeDuration(HTTPProxyTimeoutKey, time.Millisecond, DefaultTimeout)
 	s.httpClient = &fasthttp.Client{
 		Name: "motan",
 		Dial: func(addr string) (net.Conn, error) {
-			c, err := fasthttp.DialTimeout(addr, DefaultTimeout)
+			c, err := mhttp.DialTimeout(addr, proxyTimeout)
 			if err != nil {
 				return c, err
 			}
 			return c, nil
 		},
-		ReadTimeout:  DefaultTimeout,
-		WriteTimeout: DefaultTimeout,
+		ReadTimeout:  proxyTimeout,
+		WriteTimeout: proxyTimeout,
 	}
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
@@ -181,7 +197,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	motanRequest := &core.MotanRequest{}
 	motanRequest.ServiceName = service
 	motanRequest.Method = string(ctx.Path())
-	motanRequest.SetAttachment(http.Proxy, "true")
+	motanRequest.SetAttachment(mhttp.Proxy, "true")
 
 	headerBuffer := &bytes.Buffer{}
 	// server do the url rewrite
