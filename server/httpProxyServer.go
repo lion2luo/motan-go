@@ -125,6 +125,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 			for _, d := range s.deny {
 				if hostAndPort == d {
 					ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
+					ctx.Response.SetBodyString("host " + hostAndPort + " denied")
 					return
 				}
 			}

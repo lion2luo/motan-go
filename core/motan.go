@@ -584,8 +584,20 @@ func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
 	return nil
 }
 
-func BuildExceptionResponse(requestid uint64, e *Exception) *MotanResponse {
-	return &MotanResponse{RequestID: requestid, Exception: e}
+func BuildExceptionResponse(requestID uint64, e *Exception) *MotanResponse {
+	return &MotanResponse{RequestID: requestID, Exception: e}
+}
+
+func BuildExceptionResponseWithCode(request Request, code int, start int64, err error) *MotanResponse {
+	return &MotanResponse{
+		RequestID:   request.GetRequestID(),
+		ProcessTime: int64((time.Now().UnixNano() - start) / 1e6),
+		Exception: &Exception{
+			ErrCode: code,
+			ErrMsg:  err.Error(),
+			ErrType: ServiceException,
+		},
+	}
 }
 
 // extensions factory-func

@@ -12,6 +12,7 @@ import (
 const (
 	Grpc   = "grpc"
 	Motan2 = "motan2"
+	HTTP   = "http"
 	Mock   = "mockEndpoint"
 )
 
@@ -29,6 +30,10 @@ func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtEndpoint(Grpc, func(url *motan.URL) motan.EndPoint {
 		return &GrpcEndPoint{url: url}
+	})
+
+	extFactory.RegistExtEndpoint(HTTP, func(url *motan.URL) motan.EndPoint {
+		return &HTTPEndpoint{url: url}
 	})
 
 	extFactory.RegistExtEndpoint(Mock, func(url *motan.URL) motan.EndPoint {

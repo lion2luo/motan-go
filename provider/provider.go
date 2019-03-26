@@ -9,12 +9,13 @@ import (
 
 // ext name
 const (
-	CGI     = "cgi"
-	HTTP    = "http"
-	HTTPX   = "httpx"
-	MOTAN2  = "motan2"
-	Mock    = "mockProvider"
-	Default = "default"
+	CGI          = "cgi"
+	HTTP         = "http"
+	HTTPX        = "httpx"
+	ReverseProxy = "reverseProxy"
+	MOTAN2       = "motan2"
+	Mock         = "mockProvider"
+	Default      = "default"
 )
 
 func RegistDefaultProvider(extFactory motan.ExtensionFactory) {
@@ -29,6 +30,10 @@ func RegistDefaultProvider(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtProvider(HTTPX, func(url *motan.URL) motan.Provider {
 		return &HTTPXProvider{url: url}
+	})
+
+	extFactory.RegistExtProvider(ReverseProxy, func(url *motan.URL) motan.Provider {
+		return &ReverseProxyProvider{url: url, extensionFactory: extFactory}
 	})
 
 	extFactory.RegistExtProvider(MOTAN2, func(url *motan.URL) motan.Provider {

@@ -113,6 +113,10 @@ func (u *URL) GetParam(key string, defaultValue string) string {
 	return ret
 }
 
+func (u *URL) GetString(key string) string {
+	return u.GetParam(key, "")
+}
+
 // GetTimeDuration get time duration from params.
 func (u *URL) GetTimeDuration(key string, unit time.Duration, defaultDuration time.Duration) time.Duration {
 	if t, ok := u.Parameters[key]; ok {
@@ -128,6 +132,14 @@ func (u *URL) PutParam(key string, value string) {
 		u.Parameters = make(map[string]string)
 	}
 	u.Parameters[key] = value
+}
+
+func (u *URL) RemoveParam(key string) (string, bool) {
+	if value, exist := u.Parameters[key]; exist {
+		delete(u.Parameters, key)
+		return value, exist
+	}
+	return "", false
 }
 
 func (u *URL) ToExtInfo() string {
@@ -151,6 +163,10 @@ func (u *URL) ToExtInfo() string {
 	}
 	return buf.String()
 
+}
+
+func (u *URL) String() string {
+	return u.ToExtInfo()
 }
 
 func FromExtInfo(extinfo string) *URL {

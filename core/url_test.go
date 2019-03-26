@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strconv"
 	"strings"
 	"testing"
@@ -155,4 +156,35 @@ func TestGetPositiveIntValue(t *testing.T) {
 	if v != 20000000 {
 		t.Errorf("get positive int fail. v:%d", v)
 	}
+}
+
+func TestURL_GetString(t *testing.T) {
+	params := make(map[string]string, 0)
+	params["key"] = "value"
+
+	noParamURL := URL{}
+	withParamURL := URL{Parameters: params}
+	assert.Equal(t, "", noParamURL.GetString("key"))
+	assert.Equal(t, "", noParamURL.GetString("key_none_exist"))
+	assert.Equal(t, "value", withParamURL.GetString("key"))
+	assert.Equal(t, "", withParamURL.GetString("key_none_exist"))
+}
+
+func TestURL_RemoveParam(t *testing.T) {
+	params := make(map[string]string, 0)
+	params["key"] = "value"
+
+	noParamURL := URL{}
+	withParamURL := URL{Parameters: params}
+	assert.NotPanics(t, func() {
+		noParamURL.RemoveParam("key")
+	})
+	assert.NotPanics(t, func() {
+		noParamURL.RemoveParam("key_none_exist")
+	})
+	value, exist := withParamURL.RemoveParam("key")
+	assert.Equal(t, "value", value)
+	assert.True(t, exist)
+	value, exist = withParamURL.RemoveParam("key_none_exist")
+	assert.False(t, exist)
 }

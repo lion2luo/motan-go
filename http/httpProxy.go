@@ -18,6 +18,7 @@ const (
 	Proxy       = "HTTP_PROXY"
 	Method      = "HTTP_Method"
 	QueryString = "HTTP_QueryString"
+	Path        = "HTTP_Path"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
 var (
 	WhitespaceSplitPattern = regexp.MustCompile(`\s+`)
 
-	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString}
+	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString, Path}
 )
 
 func PatternSplit(s string, pattern *regexp.Regexp) []string {
@@ -365,7 +366,6 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		return true
 	})
 	// TODO: should we force disable http gzip?
-	fasthttpRequest.Header.Del("Accept-Encoding")
 	fasthttpRequest.Header.Del("Connection")
 	arguments := motanRequest.GetArguments()
 	if len(arguments) > 1 {
