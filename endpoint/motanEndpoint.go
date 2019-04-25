@@ -43,7 +43,7 @@ type MotanEndpoint struct {
 	proxy                     bool
 	errorCountThreshold       int64
 	keepaliveInterval         time.Duration
-	initialized               atomic.Value
+	initialized               *motan.AtomicBool
 	channelPoolCheckCh        chan struct{}
 	lastChannelUsingTime      atomic.Value
 	destroyed                 bool
@@ -76,7 +76,10 @@ func (m *MotanEndpoint) checkChannelUsing() {
 		case <-checkerTimer.C:
 			if m.lastChannelUsingTime.Load().(time.Time).Add(defaultChannelIdleInterval).After(time.Now()) {
 				m.lock.Lock()
-				m.channels.Close()
+				// as a lazy init endpoint the channels may be nil here
+				if m.channels != nil {
+					m.channels.Close()
+				}
 				m.lock.Unlock()
 			}
 		case <-m.channelPoolCheckCh:
@@ -86,7 +89,7 @@ func (m *MotanEndpoint) checkChannelUsing() {
 }
 
 func (m *MotanEndpoint) Initialize() {
-	m.initialized.Store(false)
+	m.initialized = motan.NewAtomicBool(false)
 	m.lastChannelUsingTime.Store(time.Now())
 	isLazyInit := false
 	// TODO: lazyInit should be a channel connect number, when set to 0, will using lazy init
@@ -97,13 +100,16 @@ func (m *MotanEndpoint) Initialize() {
 		m.doInitialize()
 		return
 	}
+	// we need set it to available because the endpoint will not be called forever if not do this
+	// lb will not return unavailable node
+	m.setAvailable(true)
 	go m.checkChannelUsing()
 }
 
 func (m *MotanEndpoint) doInitialize() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.initialized.Load().(bool) {
+	if m.initialized.Get() {
 		return
 	}
 	m.destroyCh = make(chan struct{}, 1)
@@ -145,7 +151,7 @@ func (m *MotanEndpoint) doInitialize() {
 		m.setAvailable(true)
 		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
 	}
-	m.initialized.Store(true)
+	m.initialized.Set(true)
 }
 
 func (m *MotanEndpoint) Destroy() {
@@ -169,7 +175,7 @@ func (m *MotanEndpoint) GetRequestTimeout(request motan.Request) time.Duration {
 }
 
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
-	if m.initialized.Load().(bool) {
+	if !m.initialized.Get() {
 		m.doInitialize()
 	}
 	reqCtx := request.GetRPCContext(true)
@@ -346,7 +352,7 @@ type Stream struct {
 	deadline time.Time
 
 	rc          *motan.RPCContext
-	isClose     atomic.Value // bool
+	isClose     *motan.AtomicBool
 	isHeartBeat bool
 }
 
@@ -433,7 +439,7 @@ func (s *Stream) SetDeadline(deadline time.Duration) {
 }
 
 func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
+	if !s.isClose.Get() {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
@@ -443,7 +449,7 @@ func (s *Stream) Close() {
 			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose.Store(true)
+		s.isClose.Set(true)
 	}
 }
 
@@ -488,7 +494,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		deadline:     time.Now().Add(1 * time.Second),
 		rc:           rc,
 	}
-	s.isClose.Store(false)
+	s.isClose = motan.NewAtomicBool(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
 	if msg.Header.IsHeartbeat() {
