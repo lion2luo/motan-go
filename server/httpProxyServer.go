@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"github.com/weibocom/motan-go/protocol"
 	"io"
 	"math"
 	"net"
@@ -222,6 +223,8 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	motanRequest.ServiceName = service
 	motanRequest.Method = string(ctx.Path())
 	motanRequest.SetAttachment(mhttp.Proxy, "true")
+	motanRequest.SetAttachment(protocol.MPath, service)
+	motanRequest.SetAttachment(protocol.MMethod, motanRequest.Method)
 
 	headerBuffer := &bytes.Buffer{}
 	// server do the url rewrite
