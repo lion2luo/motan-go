@@ -47,6 +47,7 @@ type MotanEndpoint struct {
 	keepaliveID      uint64
 	keepaliveRunning bool
 	serialization    motan.Serialization
+	count            uint64
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
@@ -139,6 +140,9 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	}
 	// get a channel
 	channel, err := m.channels.Get()
+	if atomic.AddUint64(&m.count, 1) == 1 {
+		err = errors.New("test")
+	}
 	if err != nil {
 		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s", m.url.GetAddressStr(), err.Error())
 		m.recordErrAndKeepalive()
