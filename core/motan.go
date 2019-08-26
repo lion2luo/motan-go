@@ -340,6 +340,8 @@ type RPCContext struct {
 	Proxy           bool
 	GzipSize        int
 	BodySize        int
+	RequestTime     int64
+	RemoteAddress   string
 	SerializeNum    int
 	Serialized      bool
 
@@ -469,16 +471,19 @@ func (m *MotanRequest) Clone() interface{} {
 	}
 	if m.RPCContext != nil {
 		newRequest.RPCContext = &RPCContext{
-			ExtFactory:   m.RPCContext.ExtFactory,
-			Oneway:       m.RPCContext.Oneway,
-			Proxy:        m.RPCContext.Proxy,
-			GzipSize:     m.RPCContext.GzipSize,
-			SerializeNum: m.RPCContext.SerializeNum,
-			Serialized:   m.RPCContext.Serialized,
-			AsyncCall:    m.RPCContext.AsyncCall,
-			Result:       m.RPCContext.Result,
-			Reply:        m.RPCContext.Reply,
-			Tc:           m.RPCContext.Tc,
+			ExtFactory:    m.RPCContext.ExtFactory,
+			Oneway:        m.RPCContext.Oneway,
+			Proxy:         m.RPCContext.Proxy,
+			GzipSize:      m.RPCContext.GzipSize,
+			BodySize:      m.RPCContext.BodySize,
+			RequestTime:   m.RPCContext.RequestTime,
+			RemoteAddress: m.RPCContext.RemoteAddress,
+			SerializeNum:  m.RPCContext.SerializeNum,
+			Serialized:    m.RPCContext.Serialized,
+			AsyncCall:     m.RPCContext.AsyncCall,
+			Result:        m.RPCContext.Result,
+			Reply:         m.RPCContext.Reply,
+			Tc:            m.RPCContext.Tc,
 		}
 		if m.RPCContext.OriginalMessage != nil {
 			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {

@@ -267,6 +267,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
+		resp.SetAttachment(mhttp.Status, strconv.Itoa(httpRes.StatusCode()))
 		headerBuffer := &bytes.Buffer{}
 		httpRes.Header.Del("Connection")
 		httpRes.Header.WriteTo(headerBuffer)
@@ -310,6 +311,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
+		resp.SetAttachment(mhttp.Status, strconv.Itoa(httpRes.StatusCode()))
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
 		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		return resp
@@ -387,6 +389,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 		return resp
 	}
+	resp.SetAttachment(mhttp.Status, strconv.Itoa(httpResp.StatusCode))
 	request.GetAttachments().Range(func(k, v string) bool {
 		resp.SetAttachment(k, v)
 		return true

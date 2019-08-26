@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"encoding/json"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -12,6 +11,14 @@ const (
 	defaultRole     = "server"
 	clientAgentRole = "client-agent"
 	serverAgentRole = "server-agent"
+
+	commonFormatLayout = "${request_id}|${service}|${method}|${desc}|${remote_addr}|${request_size}|${response_size}|${business_time}|${request_time}|${res_header.HTTP_Status}|${status}|${exception}"
+)
+
+var (
+	defaultRoleAccessLogFormatter     = NewDefaultAccessLogFormatter(AccessLog + "|" + defaultRole + "|" + commonFormatLayout)
+	clientAgentRoleAccessLogFormatter = NewDefaultAccessLogFormatter(AccessLog + "|" + clientAgentRole + "|" + commonFormatLayout)
+	serverAgentRoleAccessLogFormatter = NewDefaultAccessLogFormatter(AccessLog + "|" + serverAgentRole + "|" + commonFormatLayout)
 )
 
 type AccessLogFilter struct {
@@ -31,19 +38,22 @@ func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 }
 
 func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	role := defaultRole
+	roleAccessLogFormatter := defaultRoleAccessLogFormatter
 	var ip string
 	switch caller.(type) {
 	case motan.Provider:
-		role = serverAgentRole
+		roleAccessLogFormatter = serverAgentRoleAccessLogFormatter
 		ip = request.GetAttachment(motan.HostKey)
 	case motan.EndPoint:
-		role = clientAgentRole
+		roleAccessLogFormatter = clientAgentRoleAccessLogFormatter
 		ip = caller.GetURL().Host
 	}
+	remoteAddr := ip + ":" + caller.GetURL().GetPortStr()
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	doAccessLog(t.GetName(), role, ip+":"+caller.GetURL().GetPortStr(), start, request, response)
+	request.GetRPCContext(true).RemoteAddress = remoteAddr
+	request.GetRPCContext(true).RequestTime = time.Since(start).Nanoseconds() / 1e6
+	vlog.RawAccessLog(roleAccessLogFormatter.Format(request, response))
 	return response
 }
 
@@ -61,26 +71,4 @@ func (t *AccessLogFilter) GetNext() motan.EndPointFilter {
 
 func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
-}
-
-func doAccessLog(filterName string, role string, address string, start time.Time, request motan.Request, response motan.Response) {
-	exception := response.GetException()
-	var exceptionData []byte
-	if exception != nil {
-		exceptionData, _ = json.Marshal(exception)
-	}
-	vlog.AccessLog(&vlog.AccessLogEntity{
-		FilterName:    filterName,
-		Role:          role,
-		RequestID:     response.GetRequestID(),
-		Service:       request.GetServiceName(),
-		Method:        request.GetMethod(),
-		RemoteAddress: address,
-		Desc:          request.GetMethodDesc(),
-		ReqSize:       request.GetRPCContext(true).BodySize,
-		ResSize:       response.GetRPCContext(true).BodySize,
-		BizTime:       response.GetProcessTime(),             //ms
-		TotalTime:     time.Since(start).Nanoseconds() / 1e6, //ms
-		Success:       exception == nil,
-		Exception:     string(exceptionData)})
 }

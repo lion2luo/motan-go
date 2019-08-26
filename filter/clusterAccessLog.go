@@ -4,6 +4,11 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
+	vlog "github.com/weibocom/motan-go/log"
+)
+
+var (
+	clusterAccessLogFormatter = NewDefaultAccessLogFormatter(ClusterAccessLog + "|" + clientAgentRole + "|" + commonFormatLayout)
 )
 
 type ClusterAccessLogFilter struct {
@@ -25,7 +30,8 @@ func (t *ClusterAccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 func (t *ClusterAccessLogFilter) Filter(haStrategy motan.HaStrategy, loadBalance motan.LoadBalance, request motan.Request) motan.Response {
 	start := time.Now()
 	response := t.GetNext().Filter(haStrategy, loadBalance, request)
-	doAccessLog(t.GetName(), clientAgentRole, "", start, request, response)
+	request.GetRPCContext(true).RequestTime = time.Since(start).Nanoseconds() / 1e6
+	vlog.RawAccessLog(clientAgentRoleAccessLogFormatter.Format(request, response))
 	return response
 }
 

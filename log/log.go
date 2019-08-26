@@ -62,6 +62,7 @@ type Logger interface {
 	Fatalln(...interface{})
 	Fatalf(string, ...interface{})
 	AccessLog(*AccessLogEntity)
+	RawAccessLog(string)
 	MetricsLog(string)
 	Flush()
 	SetAsync(bool)
@@ -156,10 +157,19 @@ func AccessLog(logType *AccessLogEntity) {
 		loggerInstance.AccessLog(logType)
 	}
 }
+func RawAccessLog(msg string) {
+	if loggerInstance != nil {
+		loggerInstance.RawAccessLog(msg)
+	} else {
+		log.Println(msg)
+	}
+}
 
 func MetricsLog(msg string) {
 	if loggerInstance != nil {
 		loggerInstance.MetricsLog(msg)
+	} else {
+		log.Println(msg)
 	}
 }
 
@@ -344,6 +354,10 @@ func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
 	} else {
 		d.doAccessLog(logObject)
 	}
+}
+
+func (d *defaultLogger) RawAccessLog(msg string) {
+	d.accessLogger.Info(msg)
 }
 
 func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {

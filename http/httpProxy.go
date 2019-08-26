@@ -18,6 +18,7 @@ const (
 	Proxy       = "HTTP_PROXY"
 	Method      = "HTTP_Method"
 	QueryString = "HTTP_QueryString"
+	Status      = "HTTP_Status"
 )
 
 const (
