@@ -192,7 +192,10 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		// reset errorCount
 		m.resetErr()
 	}
-
+	resCtx := response.GetRPCContext(true)
+	resCtx.ReceiveTime = rc.ReceiveTime
+	// clear request rpc context ReceiveTime, the channel stream use request context to record send time and receive time
+	rc.ReceiveTime = time.Time{}
 	if !m.proxy {
 		if err = response.ProcessDeserializable(rc.Reply); err != nil {
 			return m.defaultErrMotanResponse(request, err.Error())
@@ -360,7 +363,9 @@ func (s *Stream) Send() error {
 	select {
 	case s.channel.sendCh <- ready:
 		if s.rc != nil && s.rc.Tc != nil {
-			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: time.Now()})
+			sendTime := time.Now()
+			s.rc.SendTime = sendTime
+			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
 		}
 		return nil
 	case <-timer.C:
@@ -413,12 +418,16 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 			if err = response.ProcessDeserializable(result.Reply); err != nil {
 				result.Error = err
 			}
+			resCtx := response.GetRPCContext(true)
+			resCtx.ReceiveTime = t
 			response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 			}
 			result.Done <- result
 			return
+		} else {
+			s.rc.ReceiveTime = t
 		}
 	}
 
