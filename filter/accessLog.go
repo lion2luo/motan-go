@@ -87,7 +87,7 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 		responseCode = strconv.Itoa(exception.ErrCode)
 	} else {
 		// default success response code use http ok status code
-		if responseCode != "" {
+		if responseCode == "" {
 			responseCode = "200"
 		}
 	}
